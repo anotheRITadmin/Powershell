@@ -1,4 +1,7 @@
-param([string]$path,
+
+
+
+param([string]$path ,
        [string]$fe="*.*",
        [int]$nm = 1,
       [int]$nd = 30,
@@ -8,20 +11,23 @@ param([string]$path,
         
 #$path = "\\prod-dfeed-02\e$\TrackingLogger\Pointers\"
 #$path = "C:\scripts\"
+
 $if_older_day_move = $nm 
 $if_older_day_del = $nd
 $file_ext = $fe
 $isGzip = $Gzip
-$isDelete = $D
-write-host $args[0]
+$isDelete = $true 
+#write-host $args[0]
 #doing param checks
+$Help = $false
 if ($path -eq "" -or $path -eq "--help" -or $path -eq "-help")
 {
     $Help = $True
+    write-host $path 
 }
 if ($Help -eq $True)
 {
-    cls
+    
     write-host ""
     write-host "Example: ./FileMover [-path] (-fe|-nm|-nd|-Gzip|-D)"
     write-host "path - Directory Path of where the clean will happen"
@@ -36,17 +42,30 @@ if ($Help -eq $True)
 
 
 
+function isfilelock
+{
+    param(
+    [string] $file 
+    )
+
+    try { [IO.File]::OpenWrite($file).close();return $false }
+    catch {return $true}
+}
 
 
 Function ProcessFile($p)
 {
+    Write-Host "Starting Process" -ForegroundColor Green
+
     if((test-path  $p) -eq $False)
     {
-        Write-host "Path does not exist" $p
+        Write-host "Path does not exist $p"
         Break;
     }
     
-    $files = get-childitem ($p + $file_ext)|where-object {$_.PSIsContainer -eq $False}
+    $files = get-childitem ($p  +  $file_ext)|where-object {$_.PSIsContainer -eq $False}
+    write-host "************************************************************** " + $files.count -ForegroundColor Red 
+
     $count = $files|measure-object
     
     foreach($f in $files)
@@ -68,14 +87,25 @@ Function ProcessFile($p)
             $year = get-date $dd -format yyyy
             $day = get-date $dd -format dd
             #write-host  "move" $f.fullname ($f.Directoryname + "\$year\$month\$day\")
-            if ((test-path ($f.Directoryname + "\$year\$month\$day\")) -eq $False)
+           
+            try
             {
-                mkdir ($f.Directoryname + "\$year\$month\$day\")
+                 if ((test-path ($f.Directoryname + "\$year\$month\$day\")) -eq $False)
+                 {
+                    mkdir ($f.Directoryname + "\$year\$month\$day\")
+                 }
+                if((isfilelock -file $f.fullname) -eq $false)
+                {
+                    move $f.fullname ($f.Directoryname + "\$year\$month\$day\") -Verbose
+                
+                    if($isGzip -eq $True){Gzip-File($f.Directoryname + "\$year\$month\$day\" + $f.name)}
+                }
+            }
+            catch
+            {
+                write-host "**" -ForegroundColor Blue
             }
             
-            move $f.fullname ($f.Directoryname + "\$year\$month\$day\")
-            
-            if($isGzip -eq $True){Gzip-File($f.Directoryname + "\$year\$month\$day\" + $f.name)}
             
         }
         
@@ -89,18 +119,18 @@ function Gzip-File
 {
     param
     (
-        [String]$inFile = $(throw ìGzip-File: No filename specifiedî),
-        [String]$outFile = $($inFile + ì.gzî)
+        [String]$inFile = $(throw ‚ÄúGzip-File: No filename specified‚Äù),
+        [String]$outFile = $($inFile + ‚Äú.gz‚Äù)
     );
     trap
     {
-        Write-Host ìReceived an exception: $_. Exiting.î;
+        Write-Host ‚ÄúReceived an exception: $_. Exiting.‚Äù;
         break;
     }
 
     if (!(Test-Path $inFile))
     {
-        ìInput file $inFile does not exist.î;
+        ‚ÄúInput file $inFile does not exist.‚Äù;
         exit 1;
     }
     
@@ -111,7 +141,7 @@ function Gzip-File
     }
     
     
-    Write-Host ìCompressing $inFile to $outFile.î (get-date);
+    Write-Host ‚ÄúCompressing $inFile to $outFile.‚Äù (get-date);
     $input = New-Object System.IO.FileStream $inFile, ([IO.FileMode]::Open), ([IO.FileAccess]::Read), ([IO.FileShare]::Read);
     $output = New-Object System.IO.FileStream $outFile, ([IO.FileMode]::Create), ([IO.FileAccess]::Write), ([IO.FileShare]::None)
     $gzipStream = New-Object System.IO.Compression.GzipStream $output, ([IO.Compression.CompressionMode]::Compress)
@@ -150,17 +180,25 @@ function Gzip-File
 Function ProcessArchive($p)
 {
     #check this and last year
+
     $year = (get-date).year
+        
     if((test-path ($p+$year)) -eq $True)
     {
-        $files = get-childitem ($p+$year) -recurse|where-object {$_.PSIsContainer -eq $False}
+        $files = get-childitem ($p+$year) -Exclude *.gz -recurse|where-object {$_.PSIsContainer -eq $False}
+        
         if ($isGzip -eq $True)
         {
+            write-host "GZIP PROCESS $files"
             GzipList($files)
         }
+        write-host "$isDelete"
+
         if ($isDelete -eq $True)
         {
-            DeleteList($files)
+            Write-host  "!!!!!!!ProcessArchive $p" -ForegroundColor Red
+            DeleteList($p)
+
         }
         
       
@@ -185,15 +223,16 @@ Function GzipList($list)
     
 }
 
+
 Function DeleteList($list)
 {
-    if ($isDelete -eq $True)
-    {
-        foreach($f in $list)
-        {
-            if ($f.lastwritetime -lt (get-date).addDays(-1*$if_older_day_del)){remove-item ($f.fullname) -force}
-        }
-    }
+      
+            $l = Get-ChildItem $list *.gz -Recurse 
+            write-host $l
+            $l|where-object {$_.lastwritetime -lt  (get-date).addDays(-1*$if_older_day_del)}|Del -Force -Recurse
+
+       
+
 }
 
 function DeleteEmptyFolder([string]$p,[int]$x)
@@ -226,8 +265,20 @@ function DeleteEmptyFolder([string]$p,[int]$x)
 
 
 
+
+write-host "isDelete = " $isdelete -ForegroundColor green 
+
+
+write-host "ProcessFile " $path  -ForegroundColor Yellow
+
 ProcessFile $path
+
+write-host "ProcessArchive " $path  -ForegroundColor Yellow
+
 ProcessArchive $path
+
+write-host "Delete empty folder process"
+
 DeleteEmptyFolder $path 2
 
 
