@@ -1,0 +1,37 @@
+Remove-TypeDat
+
+add-type @"
+public struct nstat_port {
+   public string name;
+   public string filter;
+   public int time_wait;
+   public int established;
+}
+"@
+
+$list = ":80"
+
+
+function netstat-grouped()
+{
+    param
+    (
+        $stat
+    )
+    $time_wait =$stat|select-string "time_wait"
+    $established = $stat|select-string "established"
+
+     return "time_wait = " + ($time_wait.count) + " established = " + ($established.count)
+
+    }
+
+
+
+$a = netstat -n
+write-host ("Total Netstat count: "  + $a.count) 
+$sql5 = $a|select-string "10.100.1.64:42381"
+ ($sql5.Count)
+ (netstat-grouped $sql5)
+ 
+ $port80 = $a|select-string ":80" 
+ Write-Host  "Port 80:" ($port80.Count)   (netstat-grouped -stat $port80)
