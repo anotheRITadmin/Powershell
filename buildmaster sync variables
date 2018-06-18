@@ -1,0 +1,37 @@
+ 
+$uri = 'http://10.00..:/api/variables/Environment' 
+$api_key = '?key=6SnE'
+
+$dev = Invoke-RestMethod -Method Get -Uri "$uri/Development$api_key"
+$prime = Invoke-RestMethod -Method Get -Uri "$uri/Prime$api_key"
+$pp = Invoke-RestMethod -Method Get -Uri "$uri/Preprod%20ORD$api_key"
+
+
+$dev_list = $dev|Get-Member|select Name
+$dev_list[4]
+
+
+$other = "Production%20IAD"
+
+for($i = 4;$i -lt ($dev_list.Count);$i++)
+{
+    #$dev_list[$i]
+    #write-host  "$uri/Prime/$dev_list[$i]$api_key"
+    $key = $dev_list[$i].Name
+    
+    $ee = (Invoke-WebRequest -Uri "$uri/$other/$key$api_key" -Method Get -ErrorVariable err -ErrorAction SilentlyContinue)
+    If (($err.ErrorRecord.ErrorDetails.Message) -eq 'Variable not found.')
+    {
+        Write-Host $key
+        #add key tp other environment
+        Invoke-WebRequest -Uri "$uri/$other/$key$api_key" -Method put 
+    }
+
+ 
+}
+
+
+
+
+
+
