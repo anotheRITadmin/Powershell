@@ -32,3 +32,6 @@ function server-string()
 
 $a = netstat -n
 write-host ("Total Netstat count: "  + $a.count) 
+ server-string -filter ":42381"  -stat $a
+ server-string -filter ":6379"  -stat $a
+ server-string -filter ":80" -stat $a
